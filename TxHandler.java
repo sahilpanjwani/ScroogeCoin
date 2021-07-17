@@ -1,4 +1,10 @@
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+
 public class TxHandler {
+
+    private UTXOPool utxoPool;
 
     /**
      * Creates a public ledger whose current UTXOPool (collection of unspent transaction outputs) is
@@ -6,7 +12,7 @@ public class TxHandler {
      * constructor.
      */
     public TxHandler(UTXOPool utxoPool) {
-        // IMPLEMENT THIS
+        this.utxoPool = new UTXOPool(utxoPool);
     }
 
     /**
@@ -20,6 +26,30 @@ public class TxHandler {
      */
     public boolean isValidTx(Transaction tx) {
         // IMPLEMENT THIS
+        ArrayList<Transaction.Input> txInputs = tx.getInputs();
+        ArrayList<Transaction.Output> txOutputs = tx.getOutputs();
+        ArrayList<UTXO> allCurrentUTXOs = this.utxoPool.getAllUTXO();
+        double totalOfInputValues = 0.0;
+        double totalOfOutputValues = 0.0;
+        for (int i=0; i < txInputs.size(); i++) {
+            Transaction.Input currentInput = tx.getInput(i);
+            UTXO currentUTXO = new UTXO(currentInput.prevTxHash, currentInput.outputIndex);
+            if (!allCurrentUTXOs.contains(currentUTXO))
+                return false;
+            allCurrentUTXOs.remove(currentUTXO);
+            Transaction.Output prevOutput = this.utxoPool.getTxOutput(currentUTXO);
+            if (!Crypto.verifySignature(prevOutput.address, tx.getRawDataToSign(i), currentInput.signature))
+                return false;
+            totalOfInputValues += prevOutput.value;
+        }
+        for (Transaction.Output currentOutput : txOutputs) {
+            if (currentOutput.value < 0)
+                return false;
+            totalOfOutputValues += currentOutput.value;
+        }
+        if (totalOfInputValues < totalOfOutputValues)
+            return false;
+        return true;
     }
 
     /**
@@ -29,6 +59,66 @@ public class TxHandler {
      */
     public Transaction[] handleTxs(Transaction[] possibleTxs) {
         // IMPLEMENT THIS
+        HashMap<UTXO, Transaction> inputsWithTxnMap = new HashMap<>();
+        HashSet<Transaction> invalidTxns = new HashSet<>();
+
+        for (Transaction txn : possibleTxs) {
+            ArrayList<Transaction.Input> inputs = txn.getInputs();
+            for (Transaction.Input input : inputs) {
+                UTXO utxo = new UTXO(input.prevTxHash, input.outputIndex);
+                if (inputsWithTxnMap.containsKey(utxo)) {
+                    invalidTxns.add(inputsWithTxnMap.get(utxo));
+                    invalidTxns.add(txn);
+                    break;
+                }
+                inputsWithTxnMap.put(utxo, txn);
+            }
+        }
+
+        ArrayList<Transaction> validTxns = new ArrayList<>();
+        ArrayList<Transaction> tempInvalidTxns = new ArrayList<>();
+
+        for (Transaction txn: possibleTxs) {
+            if (invalidTxns.contains(txn))
+                continue;
+            if (isValidTx(txn)) {
+                validTxns.add(txn);
+                adjustTxnPool(txn);
+            }
+            else
+                tempInvalidTxns.add(txn);
+        }
+
+        boolean txnTurnedValid = true;
+        while (txnTurnedValid) {
+            txnTurnedValid = false;
+            for (Transaction txn : tempInvalidTxns) {
+                if (isValidTx(txn)) {
+                    validTxns.add(txn);
+                    adjustTxnPool(txn);
+                    txnTurnedValid = true;
+                    tempInvalidTxns.remove(txn);
+                }
+            }
+        }
+
+        Transaction[] finalTxns = new Transaction[validTxns.size()];
+        finalTxns = validTxns.toArray(finalTxns);
+        return finalTxns;
+    }
+
+    private void adjustTxnPool(Transaction txn) {
+        ArrayList<Transaction.Input> inputs = txn.getInputs();
+
+        for (Transaction.Input input : inputs) {
+            UTXO utxo = new UTXO(input.prevTxHash, input.outputIndex);
+            this.utxoPool.removeUTXO(utxo);
+        }
+
+        for (int i=0; i < txn.numOutputs(); i++) {
+            Transaction.Output output = txn.getOutput(i);
+            this.utxoPool.addUTXO(new UTXO(txn.getHash(), i), output);
+        }
     }
 
 }
