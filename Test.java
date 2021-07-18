@@ -4,5 +4,8 @@ public class Test {
         Transaction txn = new Transaction();
         TxHandler txHandler = new TxHandler(new UTXOPool());
         txHandler.isValidTx(txn);
+        Transaction[] transactions = new Transaction[1];
+        transactions[0] = txn;
+        txHandler.handleTxs(transactions);
     }
 }

@@ -1,6 +1,6 @@
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.Arrays;
+import java.util.List;
 
 public class TxHandler {
 
@@ -59,47 +59,22 @@ public class TxHandler {
      */
     public Transaction[] handleTxs(Transaction[] possibleTxs) {
         // IMPLEMENT THIS
-        HashMap<UTXO, Transaction> inputsWithTxnMap = new HashMap<>();
-        HashSet<Transaction> invalidTxns = new HashSet<>();
-
-        for (Transaction txn : possibleTxs) {
-            ArrayList<Transaction.Input> inputs = txn.getInputs();
-            for (Transaction.Input input : inputs) {
-                UTXO utxo = new UTXO(input.prevTxHash, input.outputIndex);
-                if (inputsWithTxnMap.containsKey(utxo)) {
-                    invalidTxns.add(inputsWithTxnMap.get(utxo));
-                    invalidTxns.add(txn);
-                    break;
-                }
-                inputsWithTxnMap.put(utxo, txn);
-            }
-        }
-
         ArrayList<Transaction> validTxns = new ArrayList<>();
-        ArrayList<Transaction> tempInvalidTxns = new ArrayList<>();
-
-        for (Transaction txn: possibleTxs) {
-            if (invalidTxns.contains(txn))
-                continue;
-            if (isValidTx(txn)) {
-                validTxns.add(txn);
-                adjustTxnPool(txn);
-            }
-            else
-                tempInvalidTxns.add(txn);
-        }
+        ArrayList<Transaction> tempInvalidTxns = new ArrayList<>(Arrays.asList(possibleTxs));
 
         boolean txnTurnedValid = true;
         while (txnTurnedValid) {
             txnTurnedValid = false;
+            List<Transaction> toBeRemoved = new ArrayList<>();
             for (Transaction txn : tempInvalidTxns) {
                 if (isValidTx(txn)) {
                     validTxns.add(txn);
                     adjustTxnPool(txn);
                     txnTurnedValid = true;
-                    tempInvalidTxns.remove(txn);
+                    toBeRemoved.add(txn);
                 }
             }
+            tempInvalidTxns.removeAll(toBeRemoved);
         }
 
         Transaction[] finalTxns = new Transaction[validTxns.size()];
